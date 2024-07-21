@@ -4,10 +4,29 @@ from pydantic import BaseModel, Field, BeforeValidator
 from typing import List, Optional, Annotated
 from datetime import datetime, timedelta
 from fastapi_login import LoginManager
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import userCollection, projectCollection, statusCollection
 
 app = FastAPI()
+
+# CORS 설정
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:3000",  # 프론트엔드 개발 서버 주소
+    # 필요한 다른 출처들 추가
+]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # 모든 출처를 허용하려면 ["*"]로 설정
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 메서드를 허용
+    allow_headers=["*"],  # 모든 헤더를 허용
+)
+
 
 # -----------------------------모델 섹션 시작------------------------------------------------------------------------------
 
@@ -102,7 +121,7 @@ async def get_current_user(user=Depends(manager)):
 
 
 # 로그인 요청
-@app.post("/login/")
+@app.post("/login")
 async def login(data: LoginModel = Body(...)):
     user = await authenticate_user(data.user_name,
                                    data.week1,
@@ -137,7 +156,7 @@ async def get_status(number: int):
 
 
 # 근황 추가
-@app.post("/how/{number}/add/", response_model=Status)
+@app.post("/how/{number}/add", response_model=Status)
 async def add_status(number: int, status: Status = Body(...), current_user: User = Depends(get_current_user)):
     if current_user.number != number:
         raise HTTPException(status_code=403, detail="근황 추가는 본인만 가능합니다!")
@@ -208,7 +227,7 @@ class ConnectionManager:
 chat_manager = ConnectionManager()
 
 
-@app.websocket('/chat/')
+@app.websocket('/chat')
 async def websocket_endpoint(websocket: WebSocket, token: str = Header(...)):
     try:
         # 토큰을 사용하여 사용자 인증
