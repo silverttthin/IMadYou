@@ -10,15 +10,6 @@ from database import userCollection, projectCollection, statusCollection
 
 app = FastAPI()
 
-# CORS 설정
-origins = [
-    "http://localhost",
-    "http://localhost:8000",
-    "http://localhost:3000",  # 프론트엔드 개발 서버 주소
-    # 필요한 다른 출처들 추가
-]
-
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 모든 출처를 허용하려면 ["*"]로 설정
