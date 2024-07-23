@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import pytz
 
-
 kst = pytz.timezone('Asia/Seoul')
 
 MONGO_DETAILS = "mongodb+srv://sco3o17:1q2w3e4r@cluster0.al5hilk.mongodb.net/"
@@ -211,6 +210,30 @@ async def update_status(number: int, status_id: str, updated_status: UpdateStatu
     return updated_status_data
 
 
+# 근황 삭제
+@app.delete("/how/{number}/delete/{status_id}", response_model=Status)
+async def delete_status(number: int, status_id: str, current_user: User = Depends(get_current_user)):
+    if current_user.number != number:
+        raise HTTPException(status_code=403, detail="근황 삭제는 본인만 가능합니다!")
+
+    user = await userCollection.find_one({"number": number})
+    if not user:
+        raise HTTPException(status_code=404, detail=f'{number}번 유저를 찾을 수 없습니다')
+
+    existing_status = await statusCollection.find_one({"_id": ObjectId(status_id)})
+    if not existing_status:
+        raise HTTPException(status_code=404, detail=f'ObjectID-{status_id}인 근황을 찾을 수 없습니다')
+
+    await statusCollection.delete_one({"_id": ObjectId(status_id)})
+
+    await userCollection.update_one(
+        {"number": number},
+        {"$pull": {"status_list": {"_id": ObjectId(status_id)}}}
+    )
+
+    return existing_status
+
+
 # -------------------------------------채팅 섹션 시작----------------------------------------------------------------------
 class ConnectionManager:
     def __init__(self):
@@ -236,6 +259,7 @@ class ConnectionManager:
 
 
 chat_manager = ConnectionManager()
+
 
 @app.websocket("/chat/{name}")
 async def websocket_endpoint(name: str, websocket: WebSocket):
