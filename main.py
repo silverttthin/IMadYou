@@ -207,19 +207,6 @@ async def update_status(number: int, status_id: str, updated_status: UpdateStatu
     return updated_status_data
 
 
-@app.get("/chat", response_model=List[Chat])
-async def get_chat():
-    messages = await chatCollection.find().to_list(length=100)
-    return messages
-
-
-@app.post("/chat/add", response_model=Chat)
-async def add_chat(chat: Chat = Body(...)):
-    new_message = await chatCollection.insert_one(chat.model_dump(by_alias=True))
-    created_message = await chatCollection.find_one({"_id": new_message.inserted_id})
-    return created_message
-
-
 # -------------------------------------채팅 섹션 시작----------------------------------------------------------------------
 class ConnectionManager:
     def __init__(self):
@@ -246,7 +233,6 @@ class ConnectionManager:
 
 chat_manager = ConnectionManager()
 
-
 @app.websocket("/chat/{name}")
 async def websocket_endpoint(name: str, websocket: WebSocket):
     await chat_manager.connect(websocket)
@@ -263,6 +249,7 @@ async def websocket_endpoint(name: str, websocket: WebSocket):
             await chatCollection.insert_one(chat_message)
             formatted_message = f"#{name}: {data} ({chat_message['timestamp']})"
             await chat_manager.broadcast(formatted_message)
+
     except WebSocketDisconnect:
         chat_manager.disconnect(websocket)
         await chat_manager.broadcast(f"{name}님의 연결이 끊겼습니다.")
