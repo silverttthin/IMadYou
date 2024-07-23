@@ -6,6 +6,10 @@ from datetime import datetime, timedelta
 from fastapi_login import LoginManager
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import pytz
+
+
+kst = pytz.timezone('Asia/Seoul')
 
 MONGO_DETAILS = "mongodb+srv://sco3o17:1q2w3e4r@cluster0.al5hilk.mongodb.net/"
 
@@ -47,7 +51,7 @@ class Status(BaseModel):
     end_date: str = ""  #
     content: str  #
     user_num: Optional[int] = None  #
-    created_at: str = datetime.now().strftime("%Y.%m.%d")
+    created_at: str = datetime.now(kst).strftime("%Y.%m.%d")
 
 
 class UpdateStatus(BaseModel):
@@ -244,7 +248,7 @@ async def websocket_endpoint(name: str, websocket: WebSocket):
             chat_message = {
                 "user_name": name,
                 "message": data,
-                "timestamp": datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+                "timestamp": datetime.now(kst).strftime("%Y.%m.%d %H:%M:%S")
             }
             await chatCollection.insert_one(chat_message)
             formatted_message = f"#{name}: {data} ({chat_message['timestamp']})"
