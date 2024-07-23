@@ -5,8 +5,18 @@ from typing import List, Optional, Annotated
 from datetime import datetime, timedelta
 from fastapi_login import LoginManager
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 
-from database import userCollection, projectCollection, statusCollection
+MONGO_DETAILS = "mongodb+srv://sco3o17:1q2w3e4r@cluster0.al5hilk.mongodb.net/"
+
+client = AsyncIOMotorClient(MONGO_DETAILS)
+
+db = client.imadyou
+
+userCollection = db.get_collection("user")
+projectCollection = db.get_collection("project")
+statusCollection = db.get_collection("status")
+chatCollection = db.get_collection("chat")
 
 app = FastAPI()
 
@@ -17,7 +27,6 @@ app.add_middleware(
     allow_methods=["*"],  # 모든 메서드를 허용
     allow_headers=["*"],  # 모든 헤더를 허용
 )
-
 
 # -----------------------------모델 섹션 시작------------------------------------------------------------------------------
 
@@ -51,7 +60,7 @@ class Project(BaseModel):
     id: Optional[pyObjectId] = Field(alias="_id", default=None)
     week: int
     project_name: str
-    thumbnail: str  # Base64
+    thumbnail: str
     url: Optional[str]
     teammates: List[int]
     introduction: str
@@ -65,10 +74,10 @@ class User(BaseModel):
     status_list: List[Status] = []
 
 
-class ChatMessage(BaseModel):
+class Chat(BaseModel):
     user_name: str
     message: str
-    timestamp: datetime = datetime.now()
+    timestamp: str = datetime.now().strftime("%Y.%m.%d")
 
 
 # -----------------------------인증 섹션 시작------------------------------------------------------------------------------
@@ -198,44 +207,62 @@ async def update_status(number: int, status_id: str, updated_status: UpdateStatu
     return updated_status_data
 
 
+@app.get("/chat", response_model=List[Chat])
+async def get_chat():
+    messages = await chatCollection.find().to_list(length=100)
+    return messages
+
+
+@app.post("/chat/add", response_model=Chat)
+async def add_chat(chat: Chat = Body(...)):
+    new_message = await chatCollection.insert_one(chat.model_dump(by_alias=True))
+    created_message = await chatCollection.find_one({"_id": new_message.inserted_id})
+    return created_message
+
+
 # -------------------------------------채팅 섹션 시작----------------------------------------------------------------------
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: list[WebSocket] = []
+        self.chat_history: list[str] = []
 
-    async def connect(self, websocket: WebSocket):  # 연결 목록에 내 소켓을 넣는다
+    async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
 
-    def disconnect(self, websocket: WebSocket):  # 연결 목록에서 내 소켓을 지운다
+    def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: str):  # 연결된 모든 소켓에 내 메시지를 보낸다
+    async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
+
+    async def send_chat_history(self, websocket: WebSocket):
+        messages = await chatCollection.find().sort("_id", 1).to_list(length=100)
+        for message in messages:
+            formatted_message = f"#{message['user_name']}: {message['message']} ({message['timestamp']})"
+            await websocket.send_text(formatted_message)
 
 
 chat_manager = ConnectionManager()
 
 
-@app.websocket('/chat')
-async def websocket_endpoint(websocket: WebSocket, token: str = Header(...)):
-    try:
-        # 토큰을 사용하여 사용자 인증
-        user = await manager.get_current_user(token)
-    except Exception as e:
-        await websocket.close(code=1008)
-        return
-
+@app.websocket("/chat/{name}")
+async def websocket_endpoint(name: str, websocket: WebSocket):
     await chat_manager.connect(websocket)
-    await chat_manager.broadcast(f"반가워요 {user.user_name}님!")
+    await chat_manager.send_chat_history(websocket)
 
     try:
         while True:
             data = await websocket.receive_text()
-            message = ChatMessage(user_name=user.user_name, message=data)
-            await chat_manager.broadcast(f"{message.user_name}: {message.message}")  # 채팅 송출
-
+            chat_message = {
+                "user_name": name,
+                "message": data,
+                "timestamp": datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+            }
+            await chatCollection.insert_one(chat_message)
+            formatted_message = f"#{name}: {data} ({chat_message['timestamp']})"
+            await chat_manager.broadcast(formatted_message)
     except WebSocketDisconnect:
         chat_manager.disconnect(websocket)
-        await chat_manager.broadcast(f"{user.user_name}님이 나가셨습니다.")
+        await chat_manager.broadcast(f"{name}님의 연결이 끊겼습니다.")
