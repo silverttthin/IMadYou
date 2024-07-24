@@ -10,7 +10,7 @@ import pytz
 
 kst = pytz.timezone('Asia/Seoul')
 
-MONGO_DETAILS = "mongodb+srv://sco3o17:1q2w3e4r@cluster0.al5hilk.mongodb.net/"
+MONGO_DETAILS = "mongodb+srv://sco3o17:pw@cluster0.al5hilk.mongodb.net/"
 
 client = AsyncIOMotorClient(MONGO_DETAILS)
 
@@ -109,9 +109,9 @@ async def authenticate_user(
     user = await load_user(user_name)
     if (not user or
             week1 != '화채' or
-            week2 != '2주답' or
-            week3 != '3주답' or
-            week4 != '4주답'):
+            week2 != '마니또' or
+            week3 != '올빼미주막' or
+            week4 != '계룡산'):
         return False
     return user
 
